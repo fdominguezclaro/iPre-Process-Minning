@@ -1,0 +1,8 @@
+.Rproj.user
+
+# Ignore Data folder
+Data/
+
+# MacOS
+**/*.DS_Store
+**/*.Icon
