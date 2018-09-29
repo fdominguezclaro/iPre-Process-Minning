@@ -2,8 +2,8 @@
 title: 'PM 1'
 author: 'Felipe Domínguez'
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -13,7 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r global_options, include=FALSE}
 knitr::opts_chunk$set(
   fig.path = "Figs/",
-  echo = FALSE, warning = FALSE, message = FALSE, fig.align = "center", fig.show='hold', fig.width = 12, fig.height = 9
+  echo = FALSE, warning = FALSE, message = FALSE, fig.align = "center", fig.show = 'hold', fig.width = 12, fig.height = 9
 )
 ```
 
@@ -28,17 +28,17 @@ Objetivos de la semana:
     + Cantidad de alumnos que toman los distintos exploratorios  
     + Cantidad de exploratorios que toman los alumnos.  
     
-\newline
+
 
 * Profundizar en la hipotesis H3: Depende de trayectorias educacionales (TE) que muestran desorientación.  
 
 	+ H3.1: depende de TE que incluyen varios cursos exploratorios  
 	+ H3.2: depende de TE que incluyen cursos de varios majors/minors  
 	
-___
-  
-\newline
+___  
 
+
+\newline  
 
 ```{r echo=T, include=FALSE, results='hide'}
 library(modeest)
@@ -51,6 +51,7 @@ library(ggplot2)
 library(ggthemes)
 library(forcats)
 library(ggthemr)
+library(rlist)
 
 require("ggplot2")
 require("gridExtra")
@@ -75,35 +76,30 @@ names(data2013)
 
 ```
 
-\newline
+
 
 Para este primer análisis, es necesario listar los distintos exploratorios que ofrecen los majors. Los datos fueron sacados de la página del Siding.
 
 ```{r exp_courses}
 exp_courses <- list("ICH1005", "ICH2304", "ICH1005", "IIC1005", "ICC2304", "IEE1100", "ICE2005", "ICE2623", "ICH1104", "ICH1005", "ICS1113", "ICM1001", "ICM2313", "IMM1003", "IIQ1001", "ICT2904", "ING1024", "IMM2003", "IQQ2663", "IBM1005", "ING1015", "IMT1001", "IRB1001", "IRB2001", "AQH0000")
 ```
-
-\newline
-\newline
-\newline
   
----  
+\newline  
+
   
 #### Cantidad de alumnos que toman los distintos exploratorios  
   
----  
-   
 ```{r plot}
-exp_data2013 <- subset(data2013, SIGLA %in% exp_courses)
+exp_data2013 <- subset(data2013, SIGLA %in% exp_courses, VIA_INGRESO = "ORDINARIA PAA")
 exp_data2013$SIGLA <- fct_infreq(exp_data2013$SIGLA)
 
-exp_data2014 <- subset(data2014, SIGLA %in% exp_courses)
+exp_data2014 <- subset(data2014, SIGLA %in% exp_courses, VIA_INGRESO = "ORDINARIA PAA")
 exp_data2014$SIGLA <- fct_infreq(exp_data2014$SIGLA)
 
-exp_data2015 <- subset(data2015, SIGLA %in% exp_courses)
+exp_data2015 <- subset(data2015, SIGLA %in% exp_courses, VIA_INGRESO = "ORDINARIA PAA")
 exp_data2015$SIGLA <- fct_infreq(exp_data2015$SIGLA)
 
-exp_data2016 <- subset(data2016, SIGLA %in% exp_courses)
+exp_data2016 <- subset(data2016, SIGLA %in% exp_courses, VIA_INGRESO = "ORDINARIA PAA")
 exp_data2016$SIGLA <- fct_infreq(exp_data2016$SIGLA)
 
 
@@ -118,30 +114,41 @@ p1_2016 = ggplot(exp_data2016, aes(x = SIGLA)) + geom_bar(fill = "steelblue", wi
 grid.arrange(p1_2013, p1_2014, p1_2015, p1_2016, ncol = 2)
 
 
-exp_data<- subset(data, SIGLA %in% exp_courses)
+exp_data <- subset(data, SIGLA %in% exp_courses)
 exp_data$SIGLA <- fct_infreq(exp_data$SIGLA)
 
 ggplot(exp_data, aes(x = SIGLA)) + geom_bar(fill = "steelblue", width = 0.5) + theme(axis.text.x = element_text(angle = 45, hjust = 1), plot.title = element_text(hjust = 0.5), axis.text = element_text(size = 9)) + labs(x = "Sigla", y = "Freq", title = "Cantidad alumnos por exploratorios 2013-2016")
 
 ```
-
+  
+  
 En el gráfico 1, podemos ver que los 3 eploratorios más tomados corresponden a:  
 
   - Optimización (ICS1113)  
   - Mecánica de Fluidos (ICH1104)  
   - ING(1024)  
   
-Pero estos cursos corresponden a cursos mínimos de las especializades más tomadas, por lo tanto es necesario filtrar los datos para no incluir ramos de la especialidad de cada alumno.  
+Pero estos cursos corresponden a cursos mínimos de las especializades más tomadas, por lo tanto es necesario filtrar los datos para no incluir ramos de la especialidad de cada alumno.   
 
-\newline  
-\newline
 
-  
----  
-   
+\newline    
 #### Cantidad de exploratorios tomados  
 
----  
+Resumen de los datos:  
+
+```{R, fig.height = 5}
+exp_data1 <- exp_data %>% group_by(RUT) %>% summarise(Freq = n())
+summary(exp_data1$Freq)
+
+p2_1 <- ggplot(exp_data1, aes(x = "", y = Freq)) + geom_boxplot(fill = "steelblue") + coord_cartesian(ylim = c(0, 11)) + labs(x = "", y = "Freq", title = "Cantidad de exploratorios tomados 2013-2016") + scale_y_continuous(name = "Cantidad tomada", limits = c(0, 11), breaks = seq(0, 11, 1))
+p2_2 <- ggplot(exp_data1, aes(x = Freq)) + geom_bar(fill = "steelblue", width = 0.5) + labs(x = "Cantidad tomada", y = "Freq", title = "Cantidad de exploratorios tomados 2013-2016") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_x_continuous(name = "Cantidad tomada", limits = c(0, 11), breaks = seq(0, 11, 1))
+
+grid.arrange(p2_1, p2_2, ncol = 2)
+```
+
+Como se puede ver en el resumen de los datos, la media de la cantidad de exploratorios tomados es 4.021, esto nos da un indicio (aún hay que limpiar más los datos), de que efectivamente los alumnos toman más de un exploratorio durante su carrera, lo que podría deberse a una indecisión sobre que especialidad tomar.
+
+\newline
 
 ```{r plot1, warning=TRUE, fig.height = 16}
 exp_data1_2013 <- exp_data2013 %>% group_by(RUT) %>% summarise(Freq = n())
@@ -166,18 +173,5 @@ grid.arrange(p2_1_2013, p2_2_2013, p2_1_2014, p2_2_2014, p2_1_2015, p2_2_2015, p
 ```
 
 \newline
-
-Mismos gráficos pero ahora usando los datos concatenados  
-
-```{R, fig.height = 5}
-exp_data1 <- exp_data %>% group_by(RUT) %>% summarise(Freq = n())
-summary(exp_data1$Freq)
-
-p2_1 = ggplot(exp_data1, aes(x = "", y = Freq)) + geom_boxplot(fill = "steelblue") + coord_cartesian(ylim = c(0, 11)) + labs(x = "", y = "Freq", title = "Cantidad de exploratorios tomados 2013-2016") + scale_y_continuous(name = "Cantidad tomada", limits = c(0, 11), breaks = seq(0, 11, 1))
-p2_2 = ggplot(exp_data1, aes(x = Freq)) + geom_bar(fill = "steelblue", width = 0.5) + labs(x = "Cantidad tomada", y = "Freq", title = "Cantidad de exploratorios tomados 2013-2016") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_x_continuous(name = "Cantidad tomada", limits = c(0, 11), breaks = seq(0, 11, 1))
-
-grid.arrange(p2_1, p2_2, ncol = 2)
-```
-
 
 

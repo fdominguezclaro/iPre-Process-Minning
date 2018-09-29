@@ -1,0 +1,198 @@
+---
+title: "PM 2"
+author: "Felipe Dominguez"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(
+  fig.path = "Figs/",
+  echo = FALSE, warning = FALSE, message = FALSE, fig.align = "center", fig.show = 'hold', fig.width = 12, fig.height = 7
+)
+```
+
+##### Semana 30/08 - 13/09  
+
+___
+
+Objetivos de la semana:   
+
+* Terminar de asociar los ramos minimos para no incluirlos como exploratorios.  
+
+* Filtrar alumnos en que: año egreso colegio + 1 = año ingreso, y cualquier otro filtro que resulte útil.  
+	+ Revisar archivos de Gert para ver los filtros usados.    
+    
+* Listar sets de exploratorios que toman:  
+	+ Analizar conjuntos por frecuencias.  
+	+ Analizar cuáles sets son más “chapoteados”, y cuales son los óptimos.   
+  
+* Encontrar alguna manera gráfica para representar la distribución temporal de semestres en que tomaron los exploratorios.  
+
+* Profundizar en la hipotesis H3: Depende de trayectorias educacionales (TE) que muestran desorientación.  
+	+ H3.1: depende de TE que incluyen varios cursos exploratorios  
+	+ H3.2: depende de TE que incluyen cursos de varios majors/minors  
+	
+___    
+
+```{r echo=T, include=FALSE, results='hide'}
+library(modeest)
+library(RColorBrewer)
+library(e1071)
+library(MASS)
+library(survival)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggthemes)
+library(forcats)
+library(ggthemr)
+library(rlist)
+library(stringr)
+
+require("ggplot2")
+require("gridExtra")
+
+ggthemr("dust")
+theme_update(plot.title = element_text(hjust = 0.5))
+```
+
+```{r import data}
+path <- "/Users/FDOM/Google Drive/U/4to año/8vo semestre/Process Minning iPre/iPre-Process-Minning"
+setwd(path)
+
+data2013 <- read.csv("Data/Csv/admision.2013_an.csv", head = T, strip.white = T, stringsAsFactors = T, encoding = "latin1", fill = T)
+alumnos2013 <- read.csv("Data/Csv/alumnos2013.csv", head = T, strip.white = T, stringsAsFactors = T, encoding = "latin1", fill = T)
+majors <- read.csv("Data/Match-exp/majors.csv", na.strings = "") %>% filter(!is.na(exp))
+minors <- read.csv("Data/Match-exp/minors.csv", na.strings = "") %>% filter(!is.na(SIGLA))
+
+exp_courses <- list("ICH2304", "ICH1005", "IIC1005", "ICC2304", "IEE1100", "ICE2005", "ICE2623", "ICH1104", "ICS1113", "ICM1001", "ICM2313", "IMM1003", "IIQ1001", "ICT2904", "ING1024", "IMM2003", "IQQ2663", "IBM1005", "ING1015", "IMT1001", "IRB1001", "IRB2001", "AQH0000")
+```
+
+</br>
+
+##### Datos sin filtrar majors ni minors
+
+```{r old plot, echo=FALSE}
+exp_data2013 <- subset(data2013, SIGLA %in% exp_courses, VIA_INGRESO = "ORDINARIA PAA") 
+# Filtramos egresados del colegio del ano anterior
+alumnos2013 <- subset(alumnos2013, ANO_INGRESO - COLEGIO_EGRESO <= 1) %>% select(RUT)
+exp_data2013 <- inner_join(exp_data2013, alumnos2013, by = c("RUT", "RUT"))
+
+# Ordena datos por frecuencia de cursos
+exp_data2013$SIGLA <- fct_infreq(exp_data2013$SIGLA)
+
+p1_2013 = ggplot(exp_data2013, aes(x = SIGLA)) + geom_bar(fill = "steelblue", width = 0.5) + theme(axis.text.x = element_text(angle = 45, hjust = 1), plot.title = element_text(hjust = 0.5), axis.text = element_text(size = 9)) + labs(x = "Sigla", y = "Freq", title = "# exploratorios 2013")
+p1_2013
+```
+
+```{r, fig.height=5}
+p2_1_2013 <- ggplot(exp_data2013 %>% group_by(RUT) %>% summarise(Freq = n()), aes(x = "", y = Freq)) + geom_boxplot(fill = "steelblue") + coord_cartesian(ylim = c(0, 11)) + labs(x = "", y = "Freq", title = "# exploratorios tomados 2013") + scale_y_continuous(name = "Cantidad tomada", limits = c(0, 11), breaks = seq(0, 11, 1))
+p2_2_2013 <- ggplot(exp_data2013 %>% group_by(RUT) %>% summarise(Freq = n()), aes(x = Freq)) + geom_bar(fill = "steelblue", width = 0.5) + labs(x = "Cantidad tomada", y = "Freq", title = "# exploratorios tomados 2013") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_x_continuous(name = "Cantidad tomada", limits = c(0, 11), breaks = seq(0, 11, 1))
+
+grid.arrange(p2_1_2013, p2_2_2013, ncol = 2)
+```
+
+</br>
+
+  Para realizar un análisis con informacion más correcta, se linkearon los distintos exploratorios con sus respectivos majors y minors, y sólo se tomaron como cursos exploratorios aquellos que no estuvieran como cursos mínimos en la malla inscrita por el alumno.
+  
+___    
+
+
+##### Datos filtrados  
+
+```{r, filter data}
+rows_no_match_major <- apply(exp_data2013, 1, function(x) {
+    length(intersect(which(x[['SIGLA']] == majors$exp),
+                     which(x[['MAJOR_CODIGO_SELECCIONADO']] == majors$cod))) == 0 })
+
+filtered2013 <- exp_data2013[rows_no_match_major,]
+
+rows_no_match_minor <- apply(filtered2013, 1, function(x) {
+    length(intersect(which(x[['SIGLA']] == minors$SIGLA),
+                     which(x[['MINOR_CODIGO_SELECCIONADO']] == minors$MINOR_CODIGO_SELECCIONADO))) == 0 })
+
+filtered2013 <- filtered2013[rows_no_match_minor,]
+```
+
+
+```{r, filtered_data plot1}
+# Ordena datos por frecuencia de cursos
+filtered2013$SIGLA <- fct_infreq(filtered2013$SIGLA)
+p3_1_2013 = ggplot(filtered2013, aes(x = SIGLA)) + geom_bar(fill = "steelblue", width = 0.5) + theme(axis.text.x = element_text(angle = 45, hjust = 1), plot.title = element_text(hjust = 0.5), axis.text = element_text(size = 9)) + labs(x = "Sigla", y = "Freq", title = "# exploratorios 2013 filtrado")
+p3_1_2013
+```
+
+
+```{r filtered_data plot2, fig.height=5}
+filtered2013_frec <- filtered2013 %>% group_by(RUT) %>% summarise(Freq = n())
+
+p3_2_2013 <- ggplot(filtered2013_frec, aes(x = "", y = Freq)) + geom_boxplot(fill = "steelblue") + coord_cartesian(ylim = c(0, 11)) + labs(x = "", y = "Freq", title = "# exploratorios tomados 2013 filtrado") + scale_y_continuous(name = "Cantidad tomada", limits = c(0, 11), breaks = seq(0, 11, 1))
+p3_3_2013 <- ggplot(filtered2013_frec, aes(x = Freq)) + geom_bar(fill = "steelblue", width = 0.5) + labs(x = "Cantidad tomada", y = "Freq", title = "# exploratorios tomados 2013 filtrado") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_x_continuous(name = "Cantidad tomada", limits = c(0, 11), breaks = seq(0, 11, 1))
+grid.arrange(p3_2_2013, p3_3_2013, ncol = 2)
+```
+
+</br> Se agarraron los alumnos que toman 3 exploratorios para analizar cuales son los grupos mas frecuentes.
+```{r}
+rut_3_exploratorios <- subset(filtered2013_frec, Freq == 3)
+top_explotatorios <- inner_join(filtered2013, rut_3_exploratorios, by = c('RUT' = 'RUT'))
+top_explotatorios$SIGLA <- fct_infreq(top_explotatorios$SIGLA)
+
+p4_1_2013 = ggplot(top_explotatorios, aes(x = SIGLA)) + geom_bar(fill = "steelblue", width = 0.5) + theme(axis.text.x = element_text(angle = 45, hjust = 1), plot.title = element_text(hjust = 0.5), axis.text = element_text(size = 9)) + labs(x = "Sigla", y = "Freq", title = "# Alumnos por exp de grupo 3")
+p4_1_2013
+
+```
+
+
+
+```{r BupaR}
+
+# paste(as.character(exp_data2013$ANO), paste("0", as.character(exp_data2013$SEMESTRE), sep=""), "01", sep="-") %>% paste("00:00:01", sep=" ")%>% as.POSIXct() -> time
+# time
+# exp_data2013$timestamp <- time
+# exp_data2013$timestamp
+# 
+# head(exp_data2013)
+# exp_data2013 %>%
+#   mutate(status = "complete",
+#   activity_instance = 1:nrow(.)) %>%
+#     mutate(resource = NA) %>%
+#     eventlog(
+#         case_id = "RUT",
+#         activity_id = "SIGLA",
+#         activity_instance_id = "activity_instance",
+#         lifecycle_id = "NOTA_FINAL",
+#         timestamp = "timestamp",
+#         resource_id = "resource"
+#     ) -> log2013
+
+# log2013 %>%
+#   group_by(ANO_ADMISION) %>%
+#   n_cases
+# 
+# log2013 %>%
+#   inner_join(exp_courses) %>%
+#   re_map(mapping(log2013)) -> exp_log
+# 
+# log2013 %>%
+#   set_activity_id("NOMBRE_CURSO") %>%
+#   filter(as.numeric(NOTA_FINAL) < 3.95) %>%
+#   activity_presence() %>%
+#   plot() +
+#   labs(title = "% of students passed per course per cohort",
+#        subtitle = "Courses belonging to the master only")
+# 
+# log2013 %>%
+#   filter(as.numeric(NOTA_FINAL) >= 3.95) %>%
+#   trace_length("case") %>%
+#   ggplot(aes(trace_length)) +
+#   geom_bar(aes(fill = dplyr::desc(..count..))) +
+#   coord_flip() +
+#   scale_x_continuous(breaks = 1:10) +
+#   theme_light()
+
+```
